@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  STAFF_KITCHEN
+  STAFF_FRONT_DESK
+}
+
+enum DietaryTag {
+  VEGETARIAN
+  VEGAN
+  GLUTEN_FREE
+  SPICY
+}
+
+enum OrderType {
+  PICKUP
+  DELIVERY
+}
+
+enum PaymentMethod {
+  CARD
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  SEATED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String?
+  email        String        @unique
+  passwordHash String?
+  phone        String?
+  role         UserRole      @default(USER)
+  orders       Order[]
+  reservations Reservation[]
+  reviews      Review[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Category {
+  id           String     @id @default(cuid())
+  name         String
+  slug         String     @unique
+  description  String?
+  displayOrder Int        @default(0)
+  isActive     Boolean    @default(true)
+  items        MenuItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model MenuItem {
+  id          String        @id @default(cuid())
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String        @unique
+  description String
+  image       String?
+  price       Decimal       @db.Decimal(10, 2)
+  tags        DietaryTag[]
+  isAvailable Boolean       @default(true)
+  isFeatured  Boolean       @default(false)
+  variants    Variant[]
+  addOnGroups AddOnGroup[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Variant {
+  id         String    @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name       String
+  price      Decimal   @db.Decimal(10, 2)
+  sortOrder  Int       @default(0)
+}
+
+model AddOnGroup {
+  id            String    @id @default(cuid())
+  menuItemId     String
+  menuItem       MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name          String
+  required      Boolean   @default(false)
+  maxSelections Int       @default(1)
+  options       AddOn[]
+}
+
+model AddOn {
+  id       String     @id @default(cuid())
+  groupId  String
+  group    AddOnGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name     String
+  price    Decimal    @db.Decimal(10, 2)
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
+  type            OrderType
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod
+  subtotal        Decimal       @db.Decimal(10, 2)
+  tax             Decimal       @db.Decimal(10, 2)
+  deliveryFee     Decimal       @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  deliveryAddress String?
+  notes           String?
+  items           OrderItem[]
+  payment         Payment?
+  couponId        String?
+  coupon          Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId  String?
+  menuItem    MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  name        String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  variantName String?
+  addOns      Json?
+  lineTotal   Decimal  @db.Decimal(10, 2)
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  orderId               String        @unique
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider              String        @default("stripe")
+  providerPaymentIntent String?
+  status                PaymentStatus @default(PENDING)
+  amount                Decimal       @db.Decimal(10, 2)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model Reservation {
+  id            String            @id @default(cuid())
+  userId        String?
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tableId       String?
+  table         RestaurantTable?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  customerName  String
+  customerEmail String
+  customerPhone String?
+  date          DateTime
+  time          String
+  partySize     Int
+  status        ReservationStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model RestaurantTable {
+  id           String        @id @default(cuid())
+  name         String
+  capacity     Int
+  isActive     Boolean       @default(true)
+  reservations Reservation[]
+}
+
+model Coupon {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  description    String?
+  percentOff     Int?
+  amountOff      Decimal? @db.Decimal(10, 2)
+  minOrderAmount Decimal? @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  orders         Order[]
+  expiresAt      DateTime?
+}
+
+model OpeningHour {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  openTime  String
+  closeTime String
+  isClosed  Boolean @default(false)
+}
+
+model Holiday {
+  id       String   @id @default(cuid())
+  name     String
+  date     DateTime
+  isClosed Boolean  @default(true)
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  menuItemId String?
+  menuItem   MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+}
